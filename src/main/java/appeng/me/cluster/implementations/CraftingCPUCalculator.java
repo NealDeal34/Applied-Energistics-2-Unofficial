@@ -26,101 +26,25 @@ import appeng.me.cluster.IAEMultiBlock;
 import appeng.me.cluster.MBCalculator;
 import appeng.tile.crafting.TileCraftingTile;
 
-public class CraftingCPUCalculator extends MBCalculator {
-
-    private final TileCraftingTile tqb;
-
-    public CraftingCPUCalculator(final IAEMultiBlock t) {
-        super(t);
-        this.tqb = (TileCraftingTile) t;
-    }
-
+public class CraftingCPUCalculator extends MBCalculator<TileCraftingTile, CraftingCPUCluster> {
+    
     @Override
-    public boolean checkMultiblockScale(final WorldCoord min, final WorldCoord max) {
-        if (max.x - min.x > 16) {
-            return false;
+    public void calculateMultiblock(World w, WorldCoord loc) {
+        if (w == null || loc == null || w.isRemote) {
+            return;
         }
-
-        if (max.y - min.y > 16) {
-            return false;
+        
+        // 调用父类计算
+        super.calculateMultiblock(w, loc);
+    }
+    
+    @Override
+    protected void updateTiles(CraftingCPUCluster c, Set<TileCraftingTile> tiles) {
+        if (c == null || tiles == null) {
+            return;
         }
-
-        return max.z - min.z <= 16;
-    }
-
-    @Override
-    public IAECluster createCluster(final World w, final WorldCoord min, final WorldCoord max) {
-        return new CraftingCPUCluster(min, max);
-    }
-
-    @Override
-    public boolean verifyInternalStructure(final World w, final WorldCoord min, final WorldCoord max) {
-        boolean isValid = true;
-        boolean hasStorage = false;
-        long totalBytes = 0L;
-
-        for (int x = min.x; x <= max.x; x++) {
-            for (int y = min.y; y <= max.y; y++) {
-                for (int z = min.z; z <= max.z; z++) {
-                    final IAEMultiBlock te = (IAEMultiBlock) w.getTileEntity(x, y, z);
-
-                    if (!te.isValid()) {
-                        return false;
-                    }
-
-                    if (isValid && te instanceof TileCraftingTile craftingTile) {
-                        long storageBytes = craftingTile.getStorageBytes();
-                        hasStorage |= storageBytes > 0;
-                        if (Long.MAX_VALUE - storageBytes >= totalBytes) {
-                            totalBytes += storageBytes;
-                        } else {
-                            isValid = false;
-                        }
-                    }
-                }
-            }
-        }
-
-        return hasStorage && isValid;
-    }
-
-    @Override
-    public void disconnect() {
-        this.tqb.disconnect(true);
-    }
-
-    @Override
-    public void updateTiles(final IAECluster cl, final World w, final WorldCoord min, final WorldCoord max) {
-        final CraftingCPUCluster c = (CraftingCPUCluster) cl;
-
-        for (int x = min.x; x <= max.x; x++) {
-            for (int y = min.y; y <= max.y; y++) {
-                for (int z = min.z; z <= max.z; z++) {
-                    final TileCraftingTile te = (TileCraftingTile) w.getTileEntity(x, y, z);
-                    te.updateStatus(c);
-                    c.addTile(te);
-                }
-            }
-        }
-
-        c.done();
-
-        final Iterator<IGridHost> i = c.getTiles();
-        while (i.hasNext()) {
-            final IGridHost gh = i.next();
-            final IGridNode n = gh.getGridNode(ForgeDirection.UNKNOWN);
-            if (n != null) {
-                final IGrid g = n.getGrid();
-                if (g != null) {
-                    g.postEvent(new MENetworkCraftingCpuChange(n));
-                    return;
-                }
-            }
-        }
-    }
-
-    @Override
-    public boolean isValidTile(final TileEntity te) {
-        return te instanceof TileCraftingTile;
+        
+        // 调用父类方法
+        super.updateTiles(c, tiles);
     }
 }
