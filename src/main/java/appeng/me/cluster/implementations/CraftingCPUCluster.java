@@ -212,7 +212,48 @@ public final class CraftingCPUCluster implements IAECluster, ICraftingCPU {
     private final HashMap<ICraftingPatternDetails, List<ICraftingMedium>> parallelismProvider = new HashMap<>();
     private final HashMap<ICraftingPatternDetails, ScheduledReason> reasonProvider = new HashMap<>();
     private BaseActionSource currentJobSource = null;
+    
+    synchronized void addTile(final TileCraftingTile te) {
+        if (te == null || this.isDestroyed) {
+            return;
+        }
+        
+        // 检查tile是否有效
+        if (te.isInvalid() || te.getWorldObj() == null) {
+            return;
+        }
+        
+        // 检查是否已经在集群中
+        for (TileCraftingTile existingTile : this.tiles) {
+            if (existingTile == te) {
+                return; // 已经存在，跳过添加
+            }
+        }
+        
+        if (this.machineSrc == null || te.isCoreBlock()) {
+            this.machineSrc = new MachineSource(te);
+        }
 
+        te.setCoreBlock(false);
+        te.markDirty();
+        this.tiles.push(te);
+
+        if (te.isStorage()) {
+            long additionalStorage = te.getStorageBytes();
+            if (Long.MAX_VALUE - additionalStorage >= this.availableStorage) {
+                // Safe to add as it does not cause overflow
+                this.availableStorage += additionalStorage;
+                this.storage.add(te);
+            } else {
+                // Prevent form CPU if storage overflowed
+                this.tiles.remove(te);
+            }
+        } else if (te.isStatus()) {
+            this.status.add((TileCraftingMonitorTile) te);
+        } else if (te.isAccelerator()) {
+            this.accelerator += te.acceleratorValue();
+        }
+    }
     public CraftingCPUCluster(final WorldCoord min, final WorldCoord max) {
         this.min = min;
         this.max = max;
