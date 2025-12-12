@@ -333,30 +333,37 @@ public final class CraftingCPUCluster implements IAECluster, ICraftingCPU {
     }
 
     void addTile(final TileCraftingTile te) {
-        if (this.machineSrc == null || te.isCoreBlock()) {
-            this.machineSrc = new MachineSource(te);
-        }
-
-        te.setCoreBlock(false);
-        te.markDirty();
-        this.tiles.push(te);
-
-        if (te.isStorage()) {
-            long additionalStorage = te.getStorageBytes();
-            if (Long.MAX_VALUE - additionalStorage >= this.availableStorage) {
-                // Safe to add as it does not cause overflow
-                this.availableStorage += additionalStorage;
-                this.storage.add(te);
-            } else {
-                // Prevent form CPU if storage overflowed
-                this.tiles.remove(te);
-            }
-        } else if (te.isStatus()) {
-            this.status.add((TileCraftingMonitorTile) te);
-        } else if (te.isAccelerator()) {
-            this.accelerator += te.acceleratorValue();
+    // 检查是否已经在集群中
+    for (TileCraftingTile existingTile : this.tiles) {
+        if (existingTile == te) {
+            return; // 已经存在，直接返回
         }
     }
+    
+    if (this.machineSrc == null || te.isCoreBlock()) {
+        this.machineSrc = new MachineSource(te);
+    }
+
+    te.setCoreBlock(false);
+    te.markDirty();
+    this.tiles.push(te);
+
+    if (te.isStorage()) {
+        long additionalStorage = te.getStorageBytes();
+        if (Long.MAX_VALUE - additionalStorage >= this.availableStorage) {
+            // Safe to add as it does not cause overflow
+            this.availableStorage += additionalStorage;
+            this.storage.add(te);
+        } else {
+            // Prevent form CPU if storage overflowed
+            this.tiles.remove(te);
+        }
+    } else if (te.isStatus()) {
+        this.status.add((TileCraftingMonitorTile) te);
+    } else if (te.isAccelerator()) {
+        this.accelerator += te.acceleratorValue();
+    }
+}
 
     public boolean canAccept(final IAEStack<?> input) {
         final IAEStack<?> is = this.waitingFor.findPrecise(input);
