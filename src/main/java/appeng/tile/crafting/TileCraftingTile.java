@@ -54,13 +54,14 @@ import appeng.util.Platform;
 public class TileCraftingTile extends AENetworkTile implements IAEMultiBlock, IPowerChannelState {
 
     private final CraftingCPUCalculator calc = new CraftingCPUCalculator(this);
-
     private ISimplifiedBundle lightCache;
-
     private NBTTagCompound previousState = null;
     private boolean isCoreBlock = false;
     private CraftingCPUCluster cluster;
     private static final int ACCELERATOR_SCALE_FACTOR = 4;
+    private boolean isCalculating = false;
+    private boolean needsMultiblockUpdate = false;
+    private int scheduledUpdateDelay = 0;
 
     public TileCraftingTile() {
         this.getProxy().setFlags(GridFlags.MULTIBLOCK, GridFlags.REQUIRE_CHANNEL);
@@ -90,6 +91,103 @@ public class TileCraftingTile extends AENetworkTile implements IAEMultiBlock, IP
 
         return super.getItemFromTile(obj);
     }
+
+    @Override
+    public boolean canBeRotated() {
+        return true;
+    }
+    
+    public void onReady() {
+        super.onReady();
+        this.getProxy().setVisualRepresentation(this.getItemFromTile(this));
+        
+        // 延迟执行集群计算，避免在区块加载时立即计算
+        scheduleDelayedMultiblockUpdate(2);
+    }
+    
+    /**
+     * 新增：延迟安排集群更新
+     */
+    public void scheduleDelayedMultiblockUpdate(int delayTicks) {
+        if (this.worldObj != null && !this.worldObj.isRemote && !this.isInvalid()) {
+            this.needsMultiblockUpdate = true;
+            this.scheduledUpdateDelay = Math.max(1, delayTicks);
+        }
+    }
+    
+    /**
+     * 新增：立即触发集群更新（带保护机制）
+     */
+    public void updateMultiBlock() {
+        if (this.worldObj == null || this.worldObj.isRemote || this.isInvalid()) {
+            return;
+        }
+        
+        // 防重保护
+        if (isCalculating) {
+            return;
+        }
+        
+        try {
+            isCalculating = true;
+            this.calc.calculateMultiblock(this.worldObj, this.getLocation());
+        } finally {
+            isCalculating = false;
+        }
+    }
+    
+    @Override
+    public void updateEntity() {
+        super.updateEntity();
+        
+        // 处理延迟的集群更新
+        if (!this.worldObj.isRemote && this.needsMultiblockUpdate) {
+            if (this.scheduledUpdateDelay > 0) {
+                this.scheduledUpdateDelay--;
+            } else {
+                this.updateMultiBlock();
+                this.needsMultiblockUpdate = false;
+            }
+        }
+    }
+
+    public void updateStatus(final CraftingCPUCluster c) {
+        if (this.cluster != null && this.cluster != c) {
+            this.cluster.breakCluster();
+        }
+
+        this.cluster = c;
+        this.updateMeta(true);
+    }
+
+    public void updateMeta(final boolean updateFormed) {
+        if (this.worldObj == null || this.notLoaded()) {
+            return;
+        }
+
+        final boolean formed = this.isFormed();
+        boolean power = false;
+
+        if (this.getProxy().isReady()) {
+            power = this.getProxy().isActive();
+        }
+
+        final int current = this.worldObj.getBlockMetadata(this.xCoord, this.yCoord, this.zCoord);
+        final int newMeta = (current & 3) | (formed ? 8 : 0) | (power ? 4 : 0);
+
+        if (current != newMeta) {
+            this.worldObj.setBlockMetadataWithNotify(this.xCoord, this.yCoord, this.zCoord, newMeta, 2);
+        }
+
+        if (updateFormed) {
+            if (formed) {
+                this.getProxy().setValidSides(EnumSet.allOf(ForgeDirection.class));
+            } else {
+                this.getProxy().setValidSides(EnumSet.noneOf(ForgeDirection.class));
+            }
+        }
+    }
+}
 
     @Override
     public boolean canBeRotated() {
