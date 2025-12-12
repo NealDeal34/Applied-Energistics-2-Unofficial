@@ -1,9 +1,24 @@
-
+# 在现有工作流中添加 workflow_dispatch
 name: Release tagged build
 
 on:
   push:
     tags: [ '*' ]
+  workflow_dispatch:  # 添加手动触发
+    inputs:
+      tag_name:
+        description: 'Tag to build (optional)'
+        required: false
+        type: string
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        type: choice
+        default: 'staging'
+        options:
+        - staging
+        - production
+        - test
 
 permissions:
   contents: write
